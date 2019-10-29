@@ -1,17 +1,16 @@
 package main
 
 import (
+	"math"
 	"time"
 
-	"math"
-
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/prometheus/common/model"
 )
 
-type QueryResult struct {
-	Req    queryrange.PrometheusRequest `json:"Request"`
-	Data   []queryrange.SampleStream    `json:"data"`
-	Timing Timing                       `json:"timing"`
+type Response struct {
+	Data   model.Matrix `json:"data"`
+	ErrMsg string       `json:"err_msg"`
+	Timing Timing       `json:"timing"`
 }
 
 type Timing struct {
@@ -31,12 +30,12 @@ func TrimFloat(decimal float64) func(x float64) float64 {
 	}
 }
 
-func TrimSamples(decimal float64, streams []queryrange.SampleStream) {
+func TrimSamples(decimal float64, matrix model.Matrix) {
 	trimmer := TrimFloat(decimal)
-	for _, stream := range streams {
-		for i, _ := range stream.Samples {
-			sample := &stream.Samples[i]
-			sample.Value = trimmer(sample.Value)
+	for _, stream := range matrix {
+		for i, _ := range stream.Values {
+			sample := &stream.Values[i]
+			sample.Value = model.SampleValue(trimmer(float64(sample.Value)))
 		}
 	}
 }
