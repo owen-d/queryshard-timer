@@ -217,6 +217,7 @@ func CalculateRounds(query string, start, end time.Time, stepSize time.Duration,
 
 	for t := start; t.Before(end); t = t.Add(perQueryDur) {
 		rounds = append(rounds, &Round{
+			Responses: make(map[string]*Response),
 			Range: v1.Range{
 				Start: t,
 				End:   t.Add(perQueryDur),
