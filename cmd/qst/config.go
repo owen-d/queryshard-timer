@@ -10,8 +10,8 @@ import (
 )
 
 type Backend struct {
-	Host       string `yaml:"host"`
-	Identifier string `yaml:"identifier"`
+	Host       string `yaml:"host" json:"host"`
+	Identifier string `yaml:"identifier" json:"identifier"`
 }
 
 type Config struct {

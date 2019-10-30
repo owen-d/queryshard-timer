@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 )
 
@@ -38,6 +39,8 @@ func main() {
 	conf.Validate()
 
 	runner, err := NewRunner(conf)
+	runner.Logger.Debug(fmt.Sprintf("configured with %+v", conf))
+
 	if err != nil {
 		panic(err)
 	}

@@ -21,7 +21,6 @@ type Runner struct {
 	Timing Timing
 
 	queue []*Request
-	done  chan struct{}
 }
 
 type API struct {
@@ -34,7 +33,6 @@ func NewRunner(conf Config) (*Runner, error) {
 	runner := &Runner{
 		Cfg:    conf,
 		Logger: log.New(),
-		done:   make(chan struct{}),
 	}
 
 	lvl, err := log.ParseLevel(conf.LogLevel)
@@ -74,7 +72,7 @@ func NewRunner(conf Config) (*Runner, error) {
 }
 
 type RunnerResult struct {
-	Backends []string       `json:"backends"`
+	Backends []Backend      `json:"backends"`
 	Queries  []*QueryResult `json:"queries"`
 }
 
@@ -86,7 +84,7 @@ type QueryResult struct {
 type Round struct {
 	Range     v1.Range `json:"range"`
 	Responses map[string]*Response
-	lock      sync.Mutex
+	sync.Mutex
 }
 
 /*
@@ -107,6 +105,7 @@ type Round struct {
 */
 
 func (r *Runner) Run() (res RunnerResult, error error) {
+	res.Backends = r.Cfg.Backends
 	r.Timing.Start = time.Now()
 
 	for _, query := range r.Cfg.Queries {
@@ -115,6 +114,10 @@ func (r *Runner) Run() (res RunnerResult, error error) {
 		}
 
 		rounds, err := CalculateRounds(query, r.Cfg.Start, r.Cfg.End, r.Cfg.StepSize, r.Cfg.N)
+		r.Logger.Debug(fmt.Sprintf(
+			"Calculated %d round from %s to %s with a stepsize of %s",
+			r.Cfg.N, r.Cfg.Start, r.Cfg.End, r.Cfg.StepSize,
+		))
 
 		if err != nil {
 			return res, err
@@ -139,10 +142,12 @@ func (r *Runner) Run() (res RunnerResult, error error) {
 
 	r.Process()
 
+	r.Logger.WithField("num_requests", len(r.queue)).Debug("runner finished")
 	return res, nil
 }
 
 func (r *Runner) Process() {
+	r.Logger.Debug("Processing")
 	// Use a waitgroup for all the workers to finish
 	var wg sync.WaitGroup
 	wg.Add(r.Cfg.Parallelism)
@@ -151,23 +156,30 @@ func (r *Runner) Process() {
 	intermediate := make(chan *Request)
 
 	go func() {
-		for _, req := range r.queue {
+		for i, req := range r.queue {
 			intermediate <- req
+			r.Logger.Debug(fmt.Sprintf("enqueued query %d of %d", i+1, len(r.queue)))
 		}
 		close(intermediate)
+		r.Logger.Debug("closed intermediate chan")
 	}()
 
 	for i := 0; i < r.Cfg.Parallelism; i++ {
 		go func() {
 			for req := range intermediate {
+				r.Logger.WithFields(log.Fields{
+					"id":    req.Identifier,
+					"range": req.Round.Range,
+					"query": req.Query,
+				}).Debug("Executing query")
 				req.Execute()
 			}
 			wg.Done()
+
 		}()
 	}
 
 	wg.Wait()
-	r.done <- struct{}{}
 }
 
 type Request struct {
@@ -177,8 +189,8 @@ type Request struct {
 }
 
 func (req *Request) SetResp(resp *Response) {
-	req.Round.lock.Lock()
-	defer req.Round.lock.Unlock()
+	req.Round.Lock()
+	defer req.Round.Unlock()
 
 	req.Round.Responses[req.Identifier] = resp
 }
