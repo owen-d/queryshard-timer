@@ -233,6 +233,10 @@ func CalculateRounds(query string, start, end time.Time, stepSize time.Duration,
 		return nil, fmt.Errorf("stepsize too large or n too large to create %d queries with stepsize %v", splits, stepSize)
 	}
 
+	if perQueryDur/stepSize > 11000 {
+		return nil, fmt.Errorf("too many points per query, try reducing per query duration or increasing stepsize")
+	}
+
 	for i := 0; i < cycles; i++ {
 		for t := start; t.Before(end); t = t.Add(perQueryDur) {
 			rounds = append(rounds, &Round{
