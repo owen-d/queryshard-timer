@@ -20,9 +20,10 @@ type Config struct {
 	Queries     []string          `yaml:"queries" json:"queries"`
 	Start       time.Time         `yaml:"start" json:"start"`
 	End         time.Time         `yaml:"end" json:"end"`
-	N           int               `yaml:"n_rounds" json:"n_rounds"`
+	Splits      int               `yaml:"splits" json:"splits"`
 	LogLevel    string            `yaml:"log_level"  json:"log_level" `
 	Parallelism int               `yaml:"parallelism" json:"parallelism"`
+	Cycles      int               `yaml:"cycles" json:"cycles"`
 	StepSize    time.Duration
 }
 
@@ -33,6 +34,14 @@ func (cfg *Config) Validate() {
 
 	if cfg.StepSize == time.Duration(0) {
 		cfg.StepSize = time.Minute
+	}
+
+	if cfg.Splits == 0 {
+		cfg.Splits = 1
+	}
+
+	if cfg.Cycles == 0 {
+		cfg.Cycles = 1
 	}
 }
 

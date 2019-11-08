@@ -113,15 +113,18 @@ func (r *Runner) Run() (res RunnerResult, error error) {
 			Query: query,
 		}
 
-		rounds, err := CalculateRounds(query, r.Cfg.Start, r.Cfg.End, r.Cfg.StepSize, r.Cfg.N)
-		r.Logger.Debug(fmt.Sprintf(
-			"Calculated %d round from %s to %s with a stepsize of %s",
-			r.Cfg.N, r.Cfg.Start, r.Cfg.End, r.Cfg.StepSize,
-		))
+		rounds, err := CalculateRounds(query, r.Cfg.Start, r.Cfg.End, r.Cfg.StepSize, r.Cfg.Splits, r.Cfg.Cycles)
 
 		if err != nil {
 			return res, err
 		}
+
+		r.Logger.WithFields(log.Fields{
+			"rounds":             len(rounds),
+			"start":              r.Cfg.Start,
+			"end":                r.Cfg.End,
+			"duration_per_query": r.Cfg.End.Sub(r.Cfg.Start) / time.Duration(r.Cfg.Splits),
+		}).Debug("calculated rounds")
 
 		for _, round := range rounds {
 			for _, api := range r.APIs {
@@ -138,11 +141,14 @@ func (r *Runner) Run() (res RunnerResult, error error) {
 		res.Queries = append(res.Queries, qRes)
 	}
 
-	r.Timing.End = time.Now()
-
 	r.Process()
 
-	r.Logger.WithField("num_requests", len(r.queue)).Debug("runner finished")
+	r.Timing.End = time.Now()
+	totalDur := r.Timing.End.Sub(r.Timing.Start)
+	r.Logger.WithFields(log.Fields{
+		"num_requests":   len(r.queue),
+		"total_duration": totalDur,
+	}).Debug("runner finished")
 	return res, nil
 }
 
@@ -215,27 +221,29 @@ func (req *Request) Execute() {
 	return
 }
 
-func CalculateRounds(query string, start, end time.Time, stepSize time.Duration, n int) (rounds []*Round, err error) {
+func CalculateRounds(query string, start, end time.Time, stepSize time.Duration, splits, cycles int) (rounds []*Round, err error) {
 	totalDur := end.Sub(start)
 	if totalDur < 0 {
 		return nil, fmt.Errorf("end < start")
 	}
 
-	perQueryDur := totalDur / time.Duration(n)
+	perQueryDur := totalDur / time.Duration(splits)
 
 	if perQueryDur < stepSize {
-		return nil, fmt.Errorf("stepsize too large or n too large to create %d queries with stepsize %v", n, stepSize)
+		return nil, fmt.Errorf("stepsize too large or n too large to create %d queries with stepsize %v", splits, stepSize)
 	}
 
-	for t := start; t.Before(end); t = t.Add(perQueryDur) {
-		rounds = append(rounds, &Round{
-			Responses: make(map[string]*Response),
-			Range: v1.Range{
-				Start: t,
-				End:   t.Add(perQueryDur),
-				Step:  stepSize,
-			},
-		})
+	for i := 0; i < cycles; i++ {
+		for t := start; t.Before(end); t = t.Add(perQueryDur) {
+			rounds = append(rounds, &Round{
+				Responses: make(map[string]*Response),
+				Range: v1.Range{
+					Start: t,
+					End:   t.Add(perQueryDur),
+					Step:  stepSize,
+				},
+			})
+		}
 	}
 
 	return rounds, nil
